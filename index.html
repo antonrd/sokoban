@@ -14,16 +14,17 @@
             color: #eee;
             margin: 0;
             padding: 20px;
+            padding-bottom: 150px; /* Add padding for D-pad on mobile */
         }
         .controls {
             margin-bottom: 20px;
             display: flex;
-            flex-wrap: wrap; /* Allow wrapping for smaller screens */
+            flex-wrap: wrap;
             gap: 10px;
             align-items: center;
             justify-content: center;
         }
-        select, button {
+        select, button, .dpad-button { /* Added .dpad-button for shared styling */
             padding: 8px 12px;
             font-size: 16px;
             background-color: #555;
@@ -31,9 +32,14 @@
             border: 1px solid #777;
             border-radius: 4px;
             cursor: pointer;
+            user-select: none; /* Prevent text selection on buttons */
+            -webkit-user-select: none;
         }
-        select:hover, button:hover {
+        select:hover, button:hover, .dpad-button:hover {
             background-color: #666;
+        }
+        select:active, button:active, .dpad-button:active {
+            background-color: #777; /* Visual feedback for press */
         }
         #moveCounter {
             font-size: 16px;
@@ -50,6 +56,7 @@
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
+            margin-bottom: 20px; /* Space before D-pad */
         }
         .cell {
             width: 30px;
@@ -68,11 +75,42 @@
         .player-on-target { background-color: #87cefa; }
 
         #message {
-            margin-top: 20px;
+            margin-top: 10px; /* Reduced margin as D-pad is below board */
             font-size: 1.2em;
             color: #ffeb3b;
             min-height: 1.5em;
+            text-align: center;
         }
+
+        /* D-Pad Styles */
+        #dpadControls {
+            display: grid;
+            grid-template-columns: repeat(3, 60px); /* Button size */
+            grid-template-rows: repeat(3, 60px);    /* Button size */
+            gap: 5px;
+            justify-content: center; /* Center the D-pad */
+            margin-top: 15px;
+        }
+        .dpad-button {
+            font-size: 28px; /* Larger font for arrows */
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #606060;
+            border: 2px solid #888;
+            border-radius: 10px;
+        }
+        #dpadUp { grid-column: 2; grid-row: 1; }
+        #dpadLeft { grid-column: 1; grid-row: 2; }
+        #dpadCenter { /* Optional: could be an empty div or another button */
+            grid-column: 2; grid-row: 2;
+            background-color: #444; /* Darker center */
+            border-radius: 50%; /* Make it round */
+        }
+        #dpadRight { grid-column: 3; grid-row: 2; }
+        #dpadDown { grid-column: 2; grid-row: 3; }
+
     </style>
 </head>
 <body>
@@ -87,7 +125,15 @@
     </div>
 
     <div id="gameBoard"></div>
-    <div id="message">Use arrow keys or W/A/S/D to move.</div>
+    <div id="message">Use arrow keys, W/A/S/D, or on-screen D-pad to move.</div>
+
+    <!-- D-Pad Controls -->
+    <div id="dpadControls">
+        <div></div> <button id="dpadUp" class="dpad-button">↑</button> <div></div>
+        <button id="dpadLeft" class="dpad-button">←</button> <div id="dpadCenter"></div> <button id="dpadRight" class="dpad-button">→</button>
+        <div></div> <button id="dpadDown" class="dpad-button">↓</button> <div></div>
+    </div>
+
 
     <script>
         // --- Game Data ---
@@ -1171,7 +1217,7 @@
         let playerPos = { r: 0, c: 0 };
         let numBoxesToWin = 0;
         let moveHistory = [];
-        let moveCount = 0; // New: Move counter
+        let moveCount = 0;
 
         // --- DOM Elements ---
         const gameBoardElement = document.getElementById('gameBoard');
@@ -1179,7 +1225,13 @@
         const resetButton = document.getElementById('resetButton');
         const undoButton = document.getElementById('undoButton');
         const messageElement = document.getElementById('message');
-        const moveCounterElement = document.getElementById('moveCounter'); // New: Move counter display
+        const moveCounterElement = document.getElementById('moveCounter');
+        // D-Pad Buttons
+        const dpadUpButton = document.getElementById('dpadUp');
+        const dpadDownButton = document.getElementById('dpadDown');
+        const dpadLeftButton = document.getElementById('dpadLeft');
+        const dpadRightButton = document.getElementById('dpadRight');
+
 
         // --- Helper Functions ---
         function deepCopyBoard(board) {
@@ -1230,8 +1282,8 @@
 
             moveHistory = [];
             numBoxesToWin = 0;
-            moveCount = 0; // Reset move count
-            messageElement.textContent = "Use arrow keys or W/A/S/D to move.";
+            moveCount = 0;
+            messageElement.textContent = "Use arrow keys, W/A/S/D, or on-screen D-pad to move.";
 
             for (let r = 0; r < currentBoard.length; r++) {
                 for (let c = 0; c < currentBoard[r].length; c++) {
@@ -1246,10 +1298,9 @@
 
                     if (charFromLayout === PLAYER) currentBoard[r][c] = FLOOR;
                     else if (charFromLayout === PLAYER_ON_TARGET) currentBoard[r][c] = TARGET;
-                    // BOX, BOX_ON_TARGET, WALL, FLOOR, TARGET remain as is.
                 }
             }
-            renderBoard(); // This will also call updateMoveCounterDisplay
+            renderBoard();
         }
 
         function renderBoard() {
@@ -1293,7 +1344,7 @@
                     gameBoardElement.appendChild(cellDiv);
                 }
             }
-            updateMoveCounterDisplay(); // Update move counter display
+            updateMoveCounterDisplay();
             checkWinCondition(currentBoxesOnTarget);
         }
 
@@ -1306,7 +1357,6 @@
 
             if (targetCellBoardChar === WALL) return;
 
-            // A move is about to happen (or an attempt)
             moveHistory.push({
                 board: deepCopyBoard(currentBoard),
                 playerPos: { ...playerPos }
@@ -1326,25 +1376,25 @@
                     playerPos = { r: newPlayerR, c: newPlayerC };
                     actualMoveMade = true;
                 } else {
-                    moveHistory.pop(); // Invalid push, revert history save
-                    return; // No move made
+                    moveHistory.pop();
+                    return;
                 }
-            } else { // Moving to an empty cell
+            } else {
                 playerPos = { r: newPlayerR, c: newPlayerC };
                 actualMoveMade = true;
             }
 
             if (actualMoveMade) {
-                moveCount++; // Increment move count
+                moveCount++;
             }
-            renderBoard(); // This will also update the counter display
+            renderBoard();
         }
 
         function checkWinCondition(currentBoxesOnTarget) {
             if (numBoxesToWin > 0 && currentBoxesOnTarget === numBoxesToWin) {
                 messageElement.textContent = `Level ${currentLevelIndex + 1} Complete! Moves: ${moveCount}. Congratulations!`;
             } else if (messageElement.textContent.startsWith("Level")) {
-                messageElement.textContent = "Use arrow keys or W/A/S/D to move.";
+                messageElement.textContent = "Use arrow keys, W/A/S/D, or on-screen D-pad to move.";
             }
         }
 
@@ -1370,14 +1420,14 @@
                 currentBoard = prevState.board;
                 playerPos = prevState.playerPos;
 
-                if (moveCount > 0) { // Ensure moveCount doesn't go negative
-                    moveCount--; // Decrement move count
+                if (moveCount > 0) {
+                    moveCount--;
                 }
 
                 if (!isGameWon() && !messageElement.textContent.startsWith("Level reset")) {
                      messageElement.textContent = "Move undone.";
                 }
-                renderBoard(); // This will also update the counter display
+                renderBoard();
             } else {
                 if (!messageElement.textContent.startsWith("Level")) {
                     messageElement.textContent = "No moves to undo.";
@@ -1399,7 +1449,7 @@
 
         document.addEventListener('keydown', (e) => {
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) {
-                e.preventDefault();
+                e.preventDefault(); // Prevent page scroll for these keys
             }
             switch (e.key.toLowerCase()) {
                 case 'arrowup': case 'w': movePlayer(-1, 0); break;
@@ -1408,6 +1458,13 @@
                 case 'arrowright': case 'd': movePlayer(0, 1); break;
             }
         });
+
+        // D-Pad Event Listeners
+        if(dpadUpButton) dpadUpButton.addEventListener('click', () => movePlayer(-1, 0));
+        if(dpadDownButton) dpadDownButton.addEventListener('click', () => movePlayer(1, 0));
+        if(dpadLeftButton) dpadLeftButton.addEventListener('click', () => movePlayer(0, -1));
+        if(dpadRightButton) dpadRightButton.addEventListener('click', () => movePlayer(0, 1));
+
 
         // --- Initialization ---
         populateLevelSelector();
